@@ -73,3 +73,25 @@ export const nombreMes = (per) => { const [y, m] = per.split('-').map(Number); r
 export const fechaCorta = (f) => { if (!f) return ''; const { y, m, d } = partes(f); return `${pad(d)}/${pad(m)}/${y}`; };
 export const fechaHumana = (f) => { const { y, m, d } = partes(f); return `${d} de ${MESES[m - 1]}${y !== new Date().getFullYear() ? ' ' + y : ''}`; };
 export const sumarPeriodo = (per, k) => sumarMeses(per + '-01', k, 1).slice(0, 7);
+
+export function diasEntre(desde, hasta) {
+  const a = partes(desde), b = partes(hasta);
+  return Math.round((Date.UTC(b.y, b.m - 1, b.d) - Date.UTC(a.y, a.m - 1, a.d)) / 86400000);
+}
+const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+export const diaSemana = (f) => { const { y, m, d } = partes(f); return DIAS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]; };
+export const mesCorto = (per) => { const [y, m] = per.split('-').map(Number); return MESES[m - 1].slice(0, 3) + (String(y).slice(2)); };
+
+/** Genera los cargos mensuales de un gasto fijo entre su inicio y el periodo límite (inclusive). */
+export function cargosFijo(fijo, tarjeta, hastaPeriodo) {
+  const out = []; if (!tarjeta) return out;
+  const { y, m } = partes(fijo.desde);
+  for (let k = 0; k < 240; k++) {
+    const fecha = armar(y, m + k, fijo.dia_cargo);
+    if (fecha < fijo.desde) continue;
+    if (fijo.hasta && fecha >= fijo.hasta) break;
+    if (periodo(fecha) > hastaPeriodo) break;
+    out.push({ fecha_cargo: fecha, fecha_pago: calcularCiclo(fecha, tarjeta).primerPago });
+  }
+  return out;
+}

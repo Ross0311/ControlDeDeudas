@@ -1,7 +1,7 @@
 // ===== Capa de datos: Supabase (real) o localStorage (modo demo) =====
 import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
 
-export const TABLAS = ['tarjetas', 'personas', 'compras', 'cuotas', 'estados_cuenta'];
+export const TABLAS = ['tarjetas', 'personas', 'compras', 'cuotas', 'estados_cuenta', 'categorias', 'fijos', 'ajustes'];
 export const uid = () => (crypto.randomUUID ? crypto.randomUUID() :
   'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16);
@@ -45,6 +45,8 @@ const remoto = {
   async actualizar(tabla, id, cambios) { const c = await cliente(); chk(await c.from(tabla).update(cambios).eq('id', id)); },
   async borrar(tabla, id) { const c = await cliente(); chk(await c.from(tabla).delete().eq('id', id)); },
   async borrarDonde(tabla, col, val) { const c = await cliente(); chk(await c.from(tabla).delete().eq(col, val)); },
+  async actualizarVarios(tabla, ids, cambios) { const c = await cliente(); for (let i = 0; i < ids.length; i += 200) chk(await c.from(tabla).update(cambios).in('id', ids.slice(i, i + 200))); },
+  async borrarVarios(tabla, ids) { const c = await cliente(); for (let i = 0; i < ids.length; i += 200) chk(await c.from(tabla).delete().in('id', ids.slice(i, i + 200))); },
   async upsert(tabla, fila, conflicto) { const c = await cliente(); chk(await c.from(tabla).upsert(fila, { onConflict: conflicto })); },
 };
 
@@ -61,6 +63,8 @@ const local = {
   async actualizar(t, id, c) { const s = leer(); s[t] = (s[t] || []).map(x => x.id === id ? { ...x, ...c } : x); guardar(s); },
   async borrar(t, id) { const s = leer(); s[t] = (s[t] || []).filter(x => x.id !== id); guardar(s); },
   async borrarDonde(t, col, val) { const s = leer(); s[t] = (s[t] || []).filter(x => x[col] !== val); guardar(s); },
+  async actualizarVarios(t, ids, c) { const s = leer(); const set = new Set(ids); s[t] = (s[t] || []).map(x => set.has(x.id) ? { ...x, ...c } : x); guardar(s); },
+  async borrarVarios(t, ids) { const s = leer(); const set = new Set(ids); s[t] = (s[t] || []).filter(x => !set.has(x.id)); guardar(s); },
   async upsert(t, fila, conflicto) {
     const s = leer(); const cols = conflicto.split(',').filter(c => c !== 'user_id'); const arr = s[t] || [];
     const i = arr.findIndex(x => cols.every(c => x[c] === fila[c]));
