@@ -316,3 +316,42 @@ a.btn { text-decoration: none; }
 .chips-sel.scroll::-webkit-scrollbar { display: none; }
 .chips-sel.scroll .chip-sel { white-space: nowrap; }
 @media (min-width: 700px) { .chips-sel.scroll { margin: 0 -16px; } }
+
+/* ===================== v3 ===================== */
+/* Validado */
+.vcheck { width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--line); flex: none; position: relative; background: var(--surface); }
+.vcheck.on { background: var(--ok); border-color: var(--ok); }
+.vcheck.on::after { content: ""; position: absolute; left: 7px; top: 2px; width: 7px; height: 13px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
+.row.val { background: color-mix(in srgb, var(--ok) 6%, transparent); margin: 0 -16px; padding-left: 16px; padding-right: 16px; }
+.valbar { display: flex; align-items: center; gap: 10px; padding: 6px 0 8px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+.vprog { flex: 1; height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.vprog i { display: block; height: 100%; background: var(--ok); border-radius: 99px; }
+.valbar .btn.sm { padding: 6px 10px; font-size: 12px; }
+/* Filtros de gastos */
+.fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+@media (min-width: 700px) { .fgrid { grid-template-columns: repeat(3, 1fr); } }
+.fsel { display: flex; flex-direction: column; gap: 2px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; padding: 7px 10px; cursor: pointer; min-width: 0; }
+.fsel.on { border-color: var(--brand-2); background: color-mix(in srgb, var(--brand-2) 8%, var(--surface)); }
+.fsel span { font-size: 11px; color: var(--ink-3); font-weight: 600; }
+.fsel select { border: 0; background: transparent; font-size: 15px; font-weight: 600; padding: 0; outline: none; appearance: none; -webkit-appearance: none; width: 100%; text-overflow: ellipsis; color: var(--ink); }
+.limpiar { margin-bottom: 10px; }
+.resfil { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--ink-2); padding: 4px 4px 0; }
+.resfil b { color: var(--ink); font-size: 15px; }
+.card h3 .btn.sm { padding: 6px 10px; font-size: 12px; }
+
+/* ===================== v3.1 ===================== */
+.cierre .paso { display: flex; gap: 10px; align-items: center; font-size: 14px; padding: 7px 0; border-top: 1px dashed var(--line); color: var(--ink-2); }
+.cierre .paso:first-of-type { border-top: 0; }
+.cierre .paso span { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; background: var(--surface-2); color: var(--ink-3); flex: none; }
+.cierre .paso.ok { color: var(--ink); }
+.cierre .paso.ok span { background: var(--ok); color: #fff; }
+.cierre .paso b { margin-left: auto; white-space: nowrap; }
+.cierre.cerrado { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); background: color-mix(in srgb, var(--ok) 7%, var(--surface)); }
+.ctrack i.warn { background: var(--warn); }
+.ctrack i.bad { background: var(--danger); }
+.simcard { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; }
+.simcard .ic { font-size: 26px; }
+table.sim { min-width: 0; }
+table.sim tr.bad td:last-child { color: var(--danger); }
+table.sim tr.warn td:last-child { color: var(--warn); }
+table.sim tr.ok td:last-child { color: var(--ok); }
