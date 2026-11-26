@@ -52,6 +52,15 @@ const ICON = {
   plus: I('<path d="M12 5v14M5 12h14"/>', 2.6),
   chart: I('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
   more: I('<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'),
+  menu: I('<path d="M4 7h16M4 12h16M4 17h16"/>', 2.2),
+  gear: I('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+  people: I('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.8.7 3 2.4 3.5 5.2"/>'),
+  hand: I('<path d="M7 11V6.5a1.5 1.5 0 0 1 3 0V11M10 10V4.5a1.5 1.5 0 0 1 3 0V10M13 10V5.5a1.5 1.5 0 0 1 3 0V12M16 9.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.7L4.3 14a1.5 1.5 0 0 1 2.4-1.8L7 13"/>'),
+  wallet: I('<path d="M3 7a2 2 0 0 1 2-2h12v4M3 7v10a2 2 0 0 0 2 2h14v-4M3 7h16a1 1 0 0 1 1 1v3h-4a2 2 0 0 0 0 4h4"/>'),
+  coins: I('<ellipse cx="9" cy="7" rx="6" ry="3"/><path d="M3 7v5c0 1.7 2.7 3 6 3s6-1.3 6-3V7M3 12v5c0 1.7 2.7 3 6 3 1.4 0 2.7-.2 3.7-.6"/><circle cx="17" cy="15" r="4"/>'),
+  users: I('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M17 11l2 2 3.5-4"/>'),
+  card: I('<rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M2.5 10h19M6.5 15h4"/>'),
+  tag: I('<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="8" cy="8" r="1.5"/>'),
   left: I('<path d="M15 5l-7 7 7 7"/>', 2.4),
   right: I('<path d="M9 5l7 7-7 7"/>', 2.4),
   x: I('<path d="M6 6l12 12M18 6L6 18"/>', 2.4),
@@ -327,33 +336,66 @@ function resumenMes(per) {
 }
 
 // ===================== Render principal =====================
+const SECCIONES = [
+  ['resumen', 'Resumen', 'home'], ['gastos', 'Gastos', 'list'], ['prestamos', 'Préstamos', 'hand'], ['analisis', 'Análisis', 'chart'],
+  null,
+  ['sueldo', 'Mi sueldo y avisos', 'wallet'], ['ingresos', 'Ingresos extras', 'coins'], ['cuentas', 'Cuentas', 'users'],
+  ['tarjetas', 'Tarjetas', 'card'], ['personas', 'Personas', 'people'], ['categorias', 'Categorías', 'tag'], ['ajustes', 'Ajustes', 'gear'],
+];
+const seccionesVisibles = () => SECCIONES.filter(x => !x || x[0] !== 'cuentas' || esAdmin());
+
 function render() {
   S.cargos = calcularCargos();
-  const tabs = [['resumen', 'Resumen', ICON.home], ['gastos', 'Gastos', ICON.list], ['analisis', 'Análisis', ICON.chart], ['mas', 'Más', ICON.more]];
-  const nav = (t) => `<button class="navbtn ${S.tab === t[0] ? 'on' : ''}" data-act="tab" data-v="${t[0]}">${t[2]}<span>${t[1]}</span></button>`;
-  const titulos = { resumen: 'Resumen', gastos: 'Gastos', analisis: 'Análisis', mas: 'Más opciones' };
+  const tituloDe = (k) => (SECCIONES.find(x => x && x[0] === k) || [, 'Resumen'])[1];
+  const item = (x, cls = 'navbtn') => `<button class="${cls} ${S.tab === x[0] ? 'on' : ''}" data-act="tab" data-v="${x[0]}">${ICON[x[2]]}<span>${x[1]}</span></button>`;
+  const lado = seccionesVisibles().map(x => x ? item(x, 'sidebtn') : '<div class="side-sep">Configuración</div>').join('');
+  const abajo = ['resumen', 'gastos', null, 'prestamos', 'analisis'].map(k => k ? item(SECCIONES.find(x => x && x[0] === k)) : `<button class="fab" data-act="nueva" aria-label="Nuevo gasto">${ICON.plus}</button>`).join('');
   $('#app').innerHTML = `
   ${modoDemo ? '<div class="demo-banner">Modo demo · los datos solo se guardan en este navegador</div>' : ''}
   <div class="shell">
-    <nav class="bottomnav">
+    <aside class="sidebar">
       <div class="brand-side"><div class="logo-mark">S/</div>Control de Deudas</div>
-      ${nav(tabs[0])}${nav(tabs[1])}
-      <button class="fab" data-act="nueva" aria-label="Nuevo gasto">${ICON.plus}</button>
-      ${nav(tabs[2])}${nav(tabs[3])}
-    </nav>
+      <button class="fab side" data-act="nueva">${ICON.plus}<span>Nuevo gasto</span></button>
+      ${lado}
+    </aside>
+    <nav class="bottomnav">${abajo}</nav>
     <div>
-      <header class="topbar"><h1>${titulos[S.tab]}</h1></header>
+      <header class="topbar"><h1>${tituloDe(S.tab)}</h1><button class="iconbtn menubtn" data-act="menu" aria-label="Menú">${ICON.menu}</button></header>
       <main class="main" id="main">${vista()}</main>
     </div>
   </div>`;
   postRender();
 }
 
+/** Menú completo en el celular (panel lateral). */
+function abrirMenu() {
+  const root = $('#sheet-root');
+  root.innerHTML = `<div class="sheet-bg"></div><nav class="drawer">
+    <div class="brand-side" style="display:flex"><div class="logo-mark">S/</div>Control de Deudas</div>
+    ${seccionesVisibles().map(x => x ? `<button class="sidebtn ${S.tab === x[0] ? 'on' : ''}" data-act="tab" data-v="${x[0]}">${ICON[x[2]]}<span>${x[1]}</span></button>` : '<div class="side-sep">Configuración</div>').join('')}
+  </nav>`;
+  document.body.style.overflow = 'hidden';
+  requestAnimationFrame(() => { root.querySelector('.sheet-bg').classList.add('show'); root.querySelector('.drawer').classList.add('show'); });
+  root.querySelector('.sheet-bg').onclick = cerrarMenu;
+}
+function cerrarMenu() {
+  const root = $('#sheet-root'); if (!root.querySelector('.drawer')) return;
+  root.querySelector('.drawer').classList.remove('show'); root.querySelector('.sheet-bg')?.classList.remove('show');
+  document.body.style.overflow = ''; setTimeout(() => { if (root.querySelector('.drawer')) root.innerHTML = ''; }, 250);
+}
+
 function vista() {
   switch (S.tab) {
     case 'gastos': return vistaGastos();
+    case 'prestamos': return vistaPrestamos();
     case 'analisis': return vistaAnalisis();
-    case 'mas': return vistaMas();
+    case 'sueldo': return vistaSueldo();
+    case 'ingresos': return tarjetaIngresos();
+    case 'cuentas': return esAdmin() ? tarjetaCuentas() : vistaResumen();
+    case 'tarjetas': return vistaTarjetasLista();
+    case 'personas': return vistaPersonasLista();
+    case 'categorias': return vistaCategoriasLista();
+    case 'ajustes': return vistaAjustes();
     default: return vistaResumen();
   }
 }
@@ -638,10 +680,8 @@ function linkWhatsApp(p, texto) {
 function vistaGastos() {
   const seg = `<div class="seg" style="margin-bottom:12px">
     <button data-act="vgastos" data-v="compras" class="${S.vistaGastos === 'compras' ? 'on' : ''}">Compras</button>
-    <button data-act="vgastos" data-v="fijos" class="${S.vistaGastos === 'fijos' ? 'on' : ''}">🔁 Fijos (${S.fijos.filter(f => !f.hasta || f.hasta > L.hoyISO()).length})</button>
-    <button data-act="vgastos" data-v="prestamos" class="${S.vistaGastos === 'prestamos' ? 'on' : ''}">🤝 Préstamos (${S.prestamos.filter(x => faltaPrestamo(x) > 0).length})</button></div>`;
+    <button data-act="vgastos" data-v="fijos" class="${S.vistaGastos === 'fijos' ? 'on' : ''}">🔁 Gastos fijos (${S.fijos.filter(f => !f.hasta || f.hasta > L.hoyISO()).length})</button></div>`;
   if (S.vistaGastos === 'fijos') return seg + vistaFijos();
-  if (S.vistaGastos === 'prestamos') return seg + vistaPrestamos();
   const F = S.filtro;
   const pers = ordenar(S.personas), tarjs = ordenar(S.tarjetas), cats = ordenar(S.categorias);
   const sinCat = S.compras.filter(c => !c.categoria_id).length;
@@ -791,7 +831,7 @@ function formPrestamo(id) {
       try {
         if (x) { await db.actualizar('prestamos', x.id, datos); Object.assign(x, datos); }
         else { const n = { id: uid(), ...datos, devuelto: 0, fecha_devuelto: null }; await db.insertar('prestamos', n); S.prestamos.push(n); }
-        cerrarHoja(); toast('Préstamo guardado 🤝'); S.tab = 'gastos'; S.vistaGastos = 'prestamos'; render();
+        cerrarHoja(); toast('Préstamo guardado 🤝'); S.tab = 'prestamos'; render();
       } catch (e) { err.textContent = e.message; }
     };
     if (x) $('#pr-del', sh).onclick = async () => {
@@ -880,7 +920,7 @@ function vistaAnalisis() {
       notas.push([ps >= 60 ? 'warn' : 'info', '🔮', `${capital(L.nombreMes(sig.per))} ya tiene <b>${soles(sig.total)}</b> comprometidos (${soles(sig.fijos)} en fijos + ${soles(sig.total - sig.fijos)} en cuotas). Tu parte: ${soles(sig.tuyo)}, el ${ps}% de tus ingresos de ese mes${ps >= 60 ? ' — no te pases este mes.' : '.'}`]);
     }
   } else {
-    notas.push(['info', '💼', `Agrega tu <b>sueldo mensual</b> en <b>Más → Mi sueldo y avisos</b> para decirte cuánto te queda cada mes.`]);
+    notas.push(['info', '💼', `Agrega tu <b>sueldo mensual</b> en <b>Mi sueldo y avisos</b> para decirte cuánto te queda cada mes.`]);
     if (sig.total > 0) notas.push(['info', '🔮', `${capital(L.nombreMes(sig.per))} ya tiene <b>${soles(sig.total)}</b> comprometidos (${soles(sig.fijos)} en fijos + ${soles(sig.total - sig.fijos)} en cuotas).`]);
   }
   const catAct = Object.entries(act.porCat).sort((a, b) => b[1] - a[1]);
@@ -933,7 +973,7 @@ function vistaAnalisis() {
 
   // Préstamos por cobrar
   const prestCobrar = suma(S.prestamos.filter(x => x.tipo !== 'me_prestaron' && faltaPrestamo(x) > 0), x => aSoles(faltaPrestamo(x), x.moneda));
-  if (prestCobrar > 0) notas.push(['info', '🤝', `Tienes <b>${soles(prestCobrar)}</b> prestados por cobrar. Revísalos en Gastos → Préstamos.`]);
+  if (prestCobrar > 0) notas.push(['info', '🤝', `Tienes <b>${soles(prestCobrar)}</b> prestados por cobrar. Revísalos en Préstamos.`]);
   const donut = graficoDonut(per, ing);
   const intereses = tarjetaIntereses();
   const sim = `<button class="card simcard" data-act="simular"><span class="ic">🧮</span><span class="grow"><b>¿Me alcanza para una compra?</b><br><span class="tiny">Simula una compra en cuotas y mira cómo quedan tus próximos meses</span></span>${ICON.chev}</button>`;
@@ -968,7 +1008,7 @@ function graficoDonut(per, ing) {
   const centro = `<text x="${C}" y="${C - 22}" text-anchor="middle" class="dlbl">${S.donut === 'tuyo' ? 'Gastaste' : 'Gasto del mes'}</text>
     <text x="${C}" y="${C + 4}" text-anchor="middle" class="dval">${soles(total)}</text>
     ${ing ? `<text x="${C}" y="${C + 26}" text-anchor="middle" class="dlbl">de S/ ${fmt0.format(ing)} ingresos</text>
-    <text x="${C}" y="${C + 46}" text-anchor="middle" class="dpct ${usado >= 100 ? 'bad' : usado >= 70 ? 'warn' : 'ok'}">${usado}% usado</text>` : `<text x="${C}" y="${C + 26}" text-anchor="middle" class="dlbl">agrega tu sueldo en Más</text>`}`;
+    <text x="${C}" y="${C + 46}" text-anchor="middle" class="dpct ${usado >= 100 ? 'bad' : usado >= 70 ? 'warn' : 'ok'}">${usado}% usado</text>` : `<text x="${C}" y="${C + 26}" text-anchor="middle" class="dlbl">agrega tu sueldo</text>`}`;
   return `<div class="card"><h3>🍩 ¿En qué se fue la plata? <span class="tiny">${L.nombreMes(per)}</span></h3>${seg}
     <svg viewBox="0 0 320 320" class="donut" role="img" aria-label="Gasto por categoría">${arcs}${iconos}${centro}</svg>
     <div class="dleg">${lista.map(x => `<div class="dli"><span class="dsw" style="background:${x.c.color}"></span><span>${x.c.emoji}</span><span class="grow">${esc(x.c.nombre)}</span><span class="pctxt">${Math.round(x.v / total * 100)}%</span><b class="num">${soles(x.v)}</b></div>`).join('')}</div>
@@ -1041,67 +1081,75 @@ function montarTooltips() {
   });
 }
 
-// ===================== Vista: Más =====================
-function vistaMas() {
-  const tarjs = ordenar(S.tarjetas), pers = ordenar(S.personas), cats = ordenar(S.categorias);
-  const importados = S.compras.filter(c => c.importado).length;
-  const sinCat = S.compras.filter(c => !c.categoria_id).length;
-  const pid = principalId();
-  const usoCat = {}; for (const c of S.compras) usoCat[c.categoria_id] = (usoCat[c.categoria_id] || 0) + 1;
+// ===================== Secciones de configuración =====================
+function vistaSueldo() {
+  const pers = ordenar(S.personas); const pid = principalId();
   const pushOk = 'serviceWorker' in navigator && 'PushManager' in window;
   const permiso = typeof Notification !== 'undefined' ? Notification.permission : 'no';
-  return `
-  <div class="grid-2">
-  <div class="card">
-    <h3>💼 Mi sueldo y avisos</h3>
+  return `<div class="grid-2"><div class="card">
+    <h3>💼 Mi sueldo</h3>
     <div class="field"><label for="aj-ingreso">Sueldo neto mensual (lo que te depositan)</label>
       <div class="money sm"><span>S/</span><input class="input num" id="aj-ingreso" type="number" inputmode="decimal" step="0.01" placeholder="0.00" value="${ingreso() || ''}"></div></div>
     <div class="field"><label for="aj-principal">¿Quién eres tú? (persona principal)</label>
       <select class="input" id="aj-principal">${pers.map(p => `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('')}</select></div>
+    <p class="tiny" style="margin:0">Los trabajos aparte, gratificación o CTS se registran en <b>Ingresos extras</b>.</p>
+  </div>
+  <div class="card">
+    <h3>🔔 Avisos</h3>
     <div class="field"><span class="lbl">Avisarme antes de cada pago</span>
       <div class="chips-sel">${diasAviso().map(d => `<button class="chip-sel on" data-act="quitardia" data-v="${d}">${d === 0 ? 'El mismo día' : d === 1 ? '1 día antes' : d + ' días antes'} ✕</button>`).join('')}
       <button class="chip-sel add" data-act="agregardia">+ Agregar</button></div></div>
     <div class="settings-item" style="border-top:1px solid var(--line)"><span class="grow"><b>Notificaciones en este equipo</b><br>
       <span class="tiny">${!pushOk ? 'En iPhone primero instala la app en la pantalla de inicio (iOS 16.4 o más).' : permiso === 'granted' ? '✅ Activadas' : permiso === 'denied' ? '🚫 Bloqueadas: actívalas en Ajustes del celular' : 'Te avisan aunque no abras la app'}</span></span>
       ${pushOk && permiso !== 'denied' ? `<button class="btn sm ${permiso === 'granted' ? 'ghost' : ''}" data-act="${permiso === 'granted' ? 'probarnoti' : 'activarnoti'}">${permiso === 'granted' ? 'Probar' : 'Activar'}</button>` : ''}</div>
-  </div>
-  ${tarjetaIngresos()}
-  ${tarjetaAjustes()}
-  ${esAdmin() ? tarjetaCuentas() : ''}
-  <div class="card">
-    <h3>Tarjetas <button class="btn sm ghost" data-act="tarjeta" data-v="">+ Agregar</button></h3>
+  </div></div>`;
+}
+function vistaTarjetasLista() {
+  const tarjs = ordenar(S.tarjetas);
+  return `<div class="card">
+    <h3>💳 Tarjetas <button class="btn sm ghost" data-act="tarjeta" data-v="">+ Agregar</button></h3>
     ${tarjs.map(t => `
       <button class="settings-item" data-act="tarjeta" data-v="${t.id}">
         <span class="dot" style="background:${t.color};width:14px;height:14px"></span>
         <span class="grow"><b>${esc(t.nombre)}</b> ${t.activa ? '' : '<span class="badge">Inactiva</span>'}<br><span class="tiny">${esc(t.banco)} · ${textoCiclo(t)}${Number(t.linea) > 0 ? `<br>Línea ${soles(t.linea)} · disponible ${soles(Number(t.linea) - lineaUsada(t))}` : ''}</span></span>${ICON.chev}
-      </button>`).join('') || '<p class="tiny">Aún no tienes tarjetas.</p>'}
-  </div>
-  <div class="card">
-    <h3>Personas <button class="btn sm ghost" data-act="persona" data-v="">+ Agregar</button></h3>
+      </button>`).join('') || '<p class="tiny">Aún no tienes tarjetas. Agrega la primera para empezar a registrar gastos.</p>'}
+  </div>`;
+}
+function vistaPersonasLista() {
+  const pers = ordenar(S.personas); const pid = principalId();
+  return `<div class="card">
+    <h3>👥 Personas <button class="btn sm ghost" data-act="persona" data-v="">+ Agregar</button></h3>
     ${pers.map(p => `
       <button class="settings-item" data-act="persona" data-v="${p.id}">
         <span class="avatar">${esc(iniciales(p.nombre))}</span>
         <span class="grow"><b>${esc(p.nombre)}</b> ${p.id === pid ? '<span class="badge">Tú</span>' : ''} ${p.activa ? '' : '<span class="badge">Inactiva</span>'}<br><span class="tiny">${p.telefono ? '📱 ' + esc(p.telefono) : 'Sin WhatsApp'}</span></span>${ICON.chev}
       </button>`).join('')}
-  </div>
-  <div class="card">
-    <h3>Categorías <button class="btn sm ghost" data-act="categoria" data-v="">+ Agregar</button></h3>
+  </div>`;
+}
+function vistaCategoriasLista() {
+  const cats = ordenar(S.categorias); const sinCat = S.compras.filter(c => !c.categoria_id).length;
+  const usoCat = {}; for (const c of S.compras) usoCat[c.categoria_id] = (usoCat[c.categoria_id] || 0) + 1;
+  return `<div class="card">
+    <h3>🏷️ Categorías <button class="btn sm ghost" data-act="categoria" data-v="">+ Agregar</button></h3>
     ${sinCat ? `<button class="btn ghost" data-act="autocat" style="margin-bottom:8px">✨ Categorizar automáticamente (${sinCat} sin categoría)</button>` : ''}
     ${cats.map(c => `<button class="settings-item" data-act="categoria" data-v="${c.id}"><span class="emo" style="font-size:20px">${c.emoji}</span><span class="grow"><b>${esc(c.nombre)}</b><br><span class="tiny">${usoCat[c.id] || 0} gastos${Number(c.tope) > 0 ? ` · tope ${soles(c.tope)}` : ''}</span></span>${ICON.chev}</button>`).join('')}
-  </div>
+  </div>`;
+}
+function vistaAjustes() {
+  const importados = S.compras.filter(c => c.importado).length;
+  return `<div class="grid-2">${tarjetaAjustes()}
   <div class="card">
-    <h3>Mis datos</h3>
+    <h3>📁 Mis datos</h3>
     <button class="settings-item" data-act="exportar"><span class="grow"><b>Exportar a Excel</b><br><span class="tiny">Todas las cuotas y fijos con su categoría</span></span>${ICON.chev}</button>
     <label class="settings-item" style="cursor:pointer"><span class="grow"><b>Importar historial</b><br><span class="tiny">${importados ? `Ya importaste ${importados} registros` : 'Sube el archivo historial_deudas.json'}</span></span>${ICON.chev}
       <input type="file" accept=".json,application/json" id="imp" class="hidden"></label>
   </div>
   <div class="card">
-    <h3>Cuenta</h3>
+    <h3>👤 Mi cuenta</h3>
     <div class="settings-item"><span class="grow">${esc(S.sesion?.user?.email || '')}<br><span class="tiny">${modoDemo ? 'Modo demo (sin Supabase)' : 'Conectado a Supabase'} · ${S.compras.length} gastos · ${S.fijos.length} fijos</span></span></div>
     <button class="btn ghost" data-act="recargar" style="margin:6px 0 10px">Actualizar datos</button>
     <button class="btn danger" data-act="salir">Cerrar sesión</button>
-  </div>
-  </div>`;
+  </div></div>`;
 }
 
 const esAdmin = () => !modoDemo && (S.sesion?.user?.email || '').toLowerCase() === ADMIN_EMAIL.toLowerCase();
@@ -1115,7 +1163,7 @@ function aplicarTema(t) {
 function tarjetaAjustes() {
   const t = temaActual();
   return `<div class="card">
-    <h3>⚙️ Ajustes</h3>
+    <h3>🎨 Apariencia y moneda</h3>
     <div class="field"><span class="lbl">Apariencia</span><div class="seg">
       <button data-act="tema" data-v="auto" class="${t === 'auto' ? 'on' : ''}">🌗 Automático</button>
       <button data-act="tema" data-v="light" class="${t === 'light' ? 'on' : ''}">☀️ Claro</button>
@@ -1276,7 +1324,7 @@ function formSimular() {
       const minimo = peor.length ? Math.min(...peor) : null;
       const linea = Number(t.linea) > 0 ? r2(Number(t.linea) - lineaUsada(t) - F.monto) : null;
       let veredicto;
-      if (minimo == null) veredicto = ['info', 'ℹ️', 'Agrega tu sueldo en Más para decirte si te alcanza.'];
+      if (minimo == null) veredicto = ['info', 'ℹ️', 'Agrega tu sueldo en Mi sueldo y avisos para decirte si te alcanza.'];
       else if (minimo < 0) veredicto = ['bad', '🚨', `<b>No te alcanza</b>: algún mes te quedarías en <b>${soles(minimo)}</b>. Prueba con más cuotas o espera.`];
       else if (peor.some((x, i) => { const per = L.periodo(cuotas[i].fecha_pago); return (ingresoMes(per) - x) / ingresoMes(per) >= 0.6; })) veredicto = ['warn', '⚠️', `Te alcanza, pero justo: el mes más ajustado te quedarían <b>${soles(minimo)}</b>.`];
       else veredicto = ['ok', '💚', `<b>Sí te alcanza.</b> El mes más ajustado te quedarían <b>${soles(minimo)}</b>.`];
@@ -1345,7 +1393,7 @@ function formCompra(id, pre = null) {
   const tarjs = ordenar(S.tarjetas).filter(t => t.activa || t.id === c?.tarjeta_id);
   const pers = ordenar(S.personas).filter(p => p.activa || p.id === c?.persona_id);
   const cats = ordenar(S.categorias);
-  if (!tarjs.length || !pers.length) { toast('Primero agrega una tarjeta en Más'); S.tab = 'mas'; render(); return; }
+  if (!tarjs.length || !pers.length) { toast('Primero agrega una tarjeta'); S.tab = 'tarjetas'; render(); return; }
   const F = {
     monto: c ? c.monto_total : '', moneda: c?.moneda || 'PEN', descripcion: c?.descripcion || '',
     persona_id: c?.persona_id || (pers.find(p => p.id === pref.get('persona')) || pers[0])?.id,
@@ -1876,7 +1924,7 @@ async function exportar() {
 
 // ===================== Eventos globales =====================
 const acciones = {
-  tab: (el) => { S.tab = el.dataset.v; render(); window.scrollTo(0, 0); },
+  tab: (el) => { cerrarMenu(); S.tab = el.dataset.v; render(); window.scrollTo(0, 0); },
   nueva: () => formCompra(null),
   editar: (el) => formCompra(el.dataset.v),
   fijo: (el) => formFijo(el.dataset.v || null),
@@ -1908,7 +1956,8 @@ const acciones = {
   envios: () => abrirEnvios(false),
   prestamo: (el) => formPrestamo(el.dataset.v || null),
   devolucion: (el) => formDevolucion(el.dataset.v),
-  irprestamos: () => { S.tab = 'gastos'; S.vistaGastos = 'prestamos'; render(); window.scrollTo(0, 0); },
+  irprestamos: () => { S.tab = 'prestamos'; render(); window.scrollTo(0, 0); },
+  menu: () => abrirMenu(),
   donut: (el) => { S.donut = el.dataset.v; render(); },
   tema: (el) => { aplicarTema(el.dataset.v); render(); },
   cuentanueva: () => formCuenta(),
@@ -1924,7 +1973,7 @@ document.addEventListener('click', (e) => {
   const fn = acciones[el.dataset.act]; if (fn) { e.preventDefault(); fn(el); }
 });
 document.addEventListener('change', (e) => { if (e.target.id === 'imp' && e.target.files[0]) importar(e.target.files[0]); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarHoja(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { cerrarMenu(); cerrarHoja(); } });
 document.addEventListener('visibilitychange', () => {
   // Solo recarga si pasaron más de 3 minutos: ahorra datos (egress) del plan gratis de Supabase
   if (document.visibilityState === 'visible' && S.sesion && !modoDemo && !$('#sheet-root').innerHTML && Date.now() - (S.ultimaCarga || 0) > 180000) cargarTodo();

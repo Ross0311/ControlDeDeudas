@@ -385,3 +385,27 @@ svg.donut { width: 100%; max-width: 300px; display: block; margin: 4px auto 8px;
 .dsw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
 .money input.usd { padding-left: 74px; }
 .money.sm input.usd { padding-left: 62px; }
+
+/* ===================== v7 · menú por secciones ===================== */
+.sidebar { display: none; }
+.menubtn { display: grid; }
+.bottomnav { grid-template-columns: 1fr 1fr 76px 1fr 1fr; }
+.sidebtn { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 11px 14px; border-radius: 12px; font-size: 15px; font-weight: 600; color: var(--ink-2); }
+.sidebtn svg { width: 20px; height: 20px; flex: none; }
+.sidebtn.on { background: var(--surface-2); color: var(--brand); }
+.sidebtn:active { opacity: .7; }
+.side-sep { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-3); margin: 18px 14px 6px; }
+.drawer { position: fixed; top: 0; bottom: 0; left: 0; width: min(300px, 84vw); z-index: 51; background: var(--bg); padding: calc(var(--safe-t) + 20px) 12px calc(var(--safe-b) + 20px); overflow-y: auto; transform: translateX(-100%); transition: transform .25s cubic-bezier(.2,.8,.2,1); box-shadow: 8px 0 30px rgba(0,0,0,.15); }
+.drawer.show { transform: none; }
+.drawer .brand-side { margin: 0 6px 18px; }
+@media (min-width: 900px) {
+  .shell { display: grid; grid-template-columns: 250px 1fr; }
+  .sidebar { display: flex; flex-direction: column; gap: 2px; position: sticky; top: 0; height: 100dvh; overflow-y: auto; border-right: 1px solid var(--line); padding: 24px 14px; background: var(--bg); }
+  .sidebar .brand-side { display: flex !important; }
+  .bottomnav { display: none !important; }
+  .menubtn { display: none; }
+  .fab.side { width: 100%; height: 48px; border-radius: 14px; margin: 0 0 14px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 700; font-size: 15px; }
+  .fab.side::after { content: none; }
+  .fab.side svg { width: 22px; height: 22px; }
+}
+.fab.side span { display: inline; }
