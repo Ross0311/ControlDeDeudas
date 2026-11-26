@@ -1,6 +1,6 @@
 {
-  "name": "Mis Deudas",
-  "short_name": "Mis Deudas",
+  "name": "Control de Deudas",
+  "short_name": "Deudas",
   "description": "Registro de gastos con tarjeta, cuotas y resumen por mes de pago",
   "start_url": "./",
   "scope": "./",

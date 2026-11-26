@@ -1,6 +1,6 @@
 // Service worker: guarda la app para que abra rápido. Los datos siempre vienen de Supabase.
 // Si cambias archivos de la app, sube este número para forzar la actualización.
-const VERSION = 'mis-deudas-v5';
+const VERSION = 'mis-deudas-v6';
 const ARCHIVOS = ['./', './index.html', './css/styles.css', './js/app.js', './js/logic.js', './js/db.js', './js/config.js', './js/categorias.js', './manifest.webmanifest', './icons/icon-192.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
@@ -22,7 +22,7 @@ self.addEventListener('fetch', (e) => {
 // ===== Notificaciones push (recordatorios de pago) =====
 self.addEventListener('push', (e) => {
   let d = {}; try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data && e.data.text() }; }
-  e.waitUntil(self.registration.showNotification(d.title || 'Mis Deudas', {
+  e.waitUntil(self.registration.showNotification(d.title || 'Control de Deudas', {
     body: d.body || '', icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: d.tag || 'pago', data: { url: d.url || './' },
   }));
 });

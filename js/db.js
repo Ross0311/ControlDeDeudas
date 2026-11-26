@@ -48,6 +48,12 @@ const remoto = {
   async actualizarVarios(tabla, ids, cambios) { const c = await cliente(); for (let i = 0; i < ids.length; i += 200) chk(await c.from(tabla).update(cambios).in('id', ids.slice(i, i + 200))); },
   async borrarVarios(tabla, ids) { const c = await cliente(); for (let i = 0; i < ids.length; i += 200) chk(await c.from(tabla).delete().in('id', ids.slice(i, i + 200))); },
   async upsert(tabla, fila, conflicto) { const c = await cliente(); chk(await c.from(tabla).upsert(fila, { onConflict: conflicto })); },
+  async invocar(fn, body) {
+    const c = await cliente(); const { data, error } = await c.functions.invoke(fn, { body });
+    if (error) { let m = error.message; try { const j = await error.context.json(); m = j.error || m; } catch {} throw new Error(m); }
+    if (data?.error) throw new Error(data.error);
+    return data;
+  },
 };
 
 // ---------------- Demo local ----------------
@@ -65,6 +71,7 @@ const local = {
   async borrarDonde(t, col, val) { const s = leer(); s[t] = (s[t] || []).filter(x => x[col] !== val); guardar(s); },
   async actualizarVarios(t, ids, c) { const s = leer(); const set = new Set(ids); s[t] = (s[t] || []).map(x => set.has(x.id) ? { ...x, ...c } : x); guardar(s); },
   async borrarVarios(t, ids) { const s = leer(); const set = new Set(ids); s[t] = (s[t] || []).filter(x => !set.has(x.id)); guardar(s); },
+  async invocar() { throw new Error('Disponible solo con Supabase conectado'); },
   async upsert(t, fila, conflicto) {
     const s = leer(); const cols = conflicto.split(',').filter(c => c !== 'user_id'); const arr = s[t] || [];
     const i = arr.findIndex(x => cols.every(c => x[c] === fila[c]));
