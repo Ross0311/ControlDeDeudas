@@ -185,7 +185,16 @@ const diasAviso = () => (Array.isArray(S.ajustes.dias_aviso) && S.ajustes.dias_a
 const principalId = () => S.ajustes.principal_id && S.personas.some(p => p.id === S.ajustes.principal_id)
   ? S.ajustes.principal_id : (S.personas.find(p => /JHONATAN/i.test(p.nombre)) || ordenar(S.personas)[0])?.id;
 const ingreso = () => Number(S.ajustes.ingreso) || 0;
-const extrasMes = (per) => S.ingresos.filter(i => i.periodo === per);
+/** Días de pago de las tarjetas activas (ej. [5, 8]). */
+const diasDePago = () => { const d = [...new Set(S.tarjetas.filter(t => t.activa !== false).map(t => Number(t.dia_pago)))].sort((a, b) => a - b); return d.length ? d : [1]; };
+/** Mes de pago que un ingreso alcanza a cubrir: solo sirve si llega ANTES del primer pago del mes. */
+function mesQueCubre(fecha) {
+  const { d } = L.partes(fecha); const per = L.periodo(fecha);
+  return d < diasDePago()[0] ? per : L.sumarPeriodo(per, 1);
+}
+/** Fechas de pago de un mes, ej. "05/12 y 08/12". */
+const fechasPagoTexto = (per) => diasDePago().map(d => L.fechaCorta(L.armar(+per.slice(0, 4), +per.slice(5, 7), d)).slice(0, 5)).join(' y ');
+const extrasMes = (per) => S.ingresos.filter(i => mesQueCubre(i.fecha) === per);
 const ingresoMes = (per) => r2(ingreso() + suma(extrasMes(per)));
 const TIPOS_INGRESO = [['extra', '🛠️', 'Trabajo extra'], ['grati', '🎄', 'Gratificación'], ['cts', '🏦', 'CTS'], ['bono', '🎯', 'Bono'], ['otro', '💵', 'Otro']];
 const tipoIngreso = (k) => TIPOS_INGRESO.find(t => t[0] === k) || TIPOS_INGRESO[4];
@@ -664,7 +673,7 @@ function vistaAnalisis() {
   const dTuyo = pct(act.tuyo, ant.tuyo);
   if (ant.tuyo > 0 && dTuyo != null && Math.abs(dTuyo) > 10)
     notas.push([dTuyo > 0 ? 'warn' : 'ok', dTuyo > 0 ? '🧍' : '👏', `Tu gasto personal ${dTuyo > 0 ? 'subió' : 'bajó'} <b>${Math.abs(dTuyo)}%</b> (${soles(ant.tuyo)} → ${soles(act.tuyo)}).`]);
-  if (totExtras > 0) notas.push(['ok', '💵', `Este mes recibes <b>${soles(totExtras)}</b> de ingresos extras (${extras.map(x => esc(x.descripcion || tipoIngreso(x.tipo)[2])).join(', ')}). En total entran <b>${soles(ing)}</b>.`]);
+  if (totExtras > 0) notas.push(['ok', '💵', `Para estos pagos cuentas con <b>${soles(totExtras)}</b> de ingresos extras (${extras.map(x => `${esc(x.descripcion || tipoIngreso(x.tipo)[2])}, recibido el ${L.fechaCorta(x.fecha).slice(0, 5)}`).join('; ')}). En total tienes <b>${soles(ing)}</b>.`]);
   if (ing > 0) {
     const p = Math.round(act.tuyo / ing * 100); const queda = r2(ing - act.tuyo);
     const nivel = p >= 90 ? 'bad' : p >= 60 ? 'warn' : 'ok';
@@ -850,15 +859,15 @@ function vistaMas() {
 
 function tarjetaIngresos() {
   const desde = L.sumarPeriodo(L.periodo(L.hoyISO()), -6);
-  const lista = S.ingresos.filter(i => i.periodo >= desde).sort((a, b) => b.fecha.localeCompare(a.fecha));
-  const grupos = {}; for (const i of lista) (grupos[i.periodo] ??= []).push(i);
+  const lista = S.ingresos.filter(i => mesQueCubre(i.fecha) >= desde).sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const grupos = {}; for (const i of lista) (grupos[mesQueCubre(i.fecha)] ??= []).push(i);
   return `<div class="card">
     <h3>💵 Ingresos extras <button class="btn sm ghost" data-act="ingreso" data-v="">+ Agregar</button></h3>
-    <p class="tiny" style="margin:-6px 0 8px">Trabajos aparte, gratificación, CTS, bonos… Se suman a tu sueldo en el mes que los recibes.</p>
+    <p class="tiny" style="margin:-6px 0 8px">Trabajos aparte, gratificación, CTS, bonos… Cada ingreso se suma a los primeros pagos que llegas a cubrir: si lo recibes después del día de pago, cuenta para el mes siguiente.</p>
     ${Object.keys(grupos).length ? Object.entries(grupos).map(([per, arr]) => `
-      <div class="group-h" style="margin:10px 0 2px"><span>${capital(L.nombreMes(per))}</span><span class="num">${soles(suma(arr))}</span></div>
+      <div class="group-h" style="margin:10px 0 2px"><span>Para pagos de ${L.nombreMes(per)}</span><span class="num">${soles(suma(arr))}</span></div>
       ${arr.map(i => { const t = tipoIngreso(i.tipo); return `<button class="settings-item" data-act="ingreso" data-v="${i.id}"><span class="emo" style="font-size:18px">${t[1]}</span>
-        <span class="grow"><b>${esc(i.descripcion || t[2])}</b><br><span class="tiny">${t[2]} · ${L.fechaCorta(i.fecha)}</span></span><b class="num">${soles(i.monto)}</b></button>`; }).join('')}`).join('')
+        <span class="grow"><b>${esc(i.descripcion || t[2])}</b><br><span class="tiny">${t[2]} · lo recibes el ${L.fechaCorta(i.fecha)}</span></span><b class="num">${soles(i.monto)}</b></button>`; }).join('')}`).join('')
       : '<p class="tiny" style="margin:4px 0">Aún no registras ingresos extras.</p>'}
   </div>`;
 }
@@ -866,7 +875,7 @@ function tarjetaIngresos() {
 function formIngreso(id, perSugerido) {
   const i = id ? S.ingresos.find(x => x.id === id) : null;
   let fechaDef = L.hoyISO();
-  if (!i && perSugerido && perSugerido !== L.periodo(fechaDef)) fechaDef = perSugerido + '-15';
+  if (!i && perSugerido && perSugerido !== mesQueCubre(fechaDef)) fechaDef = L.sumarPeriodo(perSugerido, -1) + '-15';
   const F = i ? { ...i } : { monto: '', tipo: 'extra', descripcion: '', fecha: fechaDef };
   abrirHoja(i ? 'Editar ingreso extra' : 'Nuevo ingreso extra', `
     <div class="field"><label>Monto</label><div class="money"><span>S/</span><input class="input num" id="i-monto" type="number" inputmode="decimal" step="0.01" placeholder="0.00" value="${F.monto}"></div></div>
@@ -876,14 +885,18 @@ function formIngreso(id, perSugerido) {
     <div class="err" id="i-err"></div>
     <button class="btn" id="i-save">Guardar ingreso</button>
     ${i ? '<button class="btn danger" id="i-del" style="margin-top:10px">Eliminar</button>' : ''}`, (sh) => {
-    const per = () => { const f = $('#i-fecha', sh).value; $('#i-per', sh).textContent = f ? `Se suma a tus ingresos de ${L.nombreMes(L.periodo(f))}.` : ''; };
+    const per = () => {
+      const f = $('#i-fecha', sh).value; if (!f) { $('#i-per', sh).innerHTML = ''; return; }
+      const m = mesQueCubre(f); const mismo = m === L.periodo(f);
+      $('#i-per', sh).innerHTML = `Lo recibes el ${L.fechaCorta(f).slice(0, 5)} → te sirve para los pagos de <b>${L.nombreMes(m)}</b> (${fechasPagoTexto(m)})${mismo ? '' : `, porque los de ${L.nombreMes(L.periodo(f)).split(' ')[0]} vencen antes.`}`;
+    };
     $('#i-fecha', sh).addEventListener('input', per); per();
     grupoChips(sh, '#i-tipo', (v) => { F.tipo = v; });
     $('#i-save', sh).onclick = async () => {
       const monto = r2($('#i-monto', sh).value); const fecha = $('#i-fecha', sh).value;
       if (!(monto > 0)) { $('#i-err', sh).textContent = 'Ingresa un monto mayor a 0'; return; }
       if (!fecha) { $('#i-err', sh).textContent = 'Elige la fecha'; return; }
-      const datos = { monto, fecha, periodo: L.periodo(fecha), tipo: F.tipo, descripcion: $('#i-desc', sh).value.trim() };
+      const datos = { monto, fecha, periodo: mesQueCubre(fecha), tipo: F.tipo, descripcion: $('#i-desc', sh).value.trim() };
       try {
         if (i) { await db.actualizar('ingresos', i.id, datos); Object.assign(i, datos); }
         else { const n = { id: uid(), ...datos }; await db.insertar('ingresos', n); S.ingresos.push(n); }
