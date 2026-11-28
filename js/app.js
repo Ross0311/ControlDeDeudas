@@ -2,12 +2,13 @@ import { db, uid, modoDemo } from './db.js';
 import { VAPID_PUBLIC_KEY, ADMIN_EMAIL } from './config.js';
 import * as L from './logic.js';
 import { CATEGORIAS_INICIALES, sugerirClave, normalizar } from './categorias.js';
+import { PDF, aJpeg } from './pdf.js';
 
 // ===================== Estado =====================
 const S = {
   sesion: null,
   tarjetas: [], personas: [], compras: [], cuotas: [], estados: [], categorias: [], fijos: [], ajustes: {},
-  validaciones: [], ingresos: [], cobros: [], prestamos: [],
+  validaciones: [], ingresos: [], cobros: [], prestamos: [], creditos: [], pagosCredito: [], creditoSel: null,
   cargos: [],                 // cuotas reales + cargos de gastos fijos (calculado)
   tab: 'resumen',
   mes: null,
@@ -61,6 +62,10 @@ const ICON = {
   users: I('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M17 11l2 2 3.5-4"/>'),
   card: I('<rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M2.5 10h19M6.5 15h4"/>'),
   tag: I('<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="8" cy="8" r="1.5"/>'),
+  bank: I('<path d="M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 21h18"/>'),
+  clip: I('<path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7l9-9a3.3 3.3 0 0 1 4.7 4.7l-9 9a1.7 1.7 0 0 1-2.4-2.4l8.3-8.3"/>'),
+  pdf: I('<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M12 12v6M9 15l3 3 3-3"/>'),
+  back: I('<path d="M15 5l-7 7 7 7"/>', 2.4),
   left: I('<path d="M15 5l-7 7 7 7"/>', 2.4),
   right: I('<path d="M9 5l7 7-7 7"/>', 2.4),
   x: I('<path d="M6 6l12 12M18 6L6 18"/>', 2.4),
@@ -94,8 +99,9 @@ async function iniciar() {
 
 async function cargarTodo(primeraVez = false) {
   try {
-    const nombres = ['tarjetas', 'personas', 'compras', 'cuotas', 'estados_cuenta', 'categorias', 'fijos', 'ajustes', 'validaciones', 'ingresos', 'cobros', 'prestamos'];
-    const [t, p, c, q, e, cat, f, aj, val, ing, cob, pre] = await Promise.all(nombres.map(x => db.todo(x)));
+    const nombres = ['tarjetas', 'personas', 'compras', 'cuotas', 'estados_cuenta', 'categorias', 'fijos', 'ajustes', 'validaciones', 'ingresos', 'cobros', 'prestamos', 'creditos', 'pagos_credito'];
+    const [t, p, c, q, e, cat, f, aj, val, ing, cob, pre, cre, pcr] = await Promise.all(nombres.map(x => db.todo(x)));
+    S.creditos = cre; S.pagosCredito = pcr;
     Object.assign(S, { tarjetas: t, personas: p, compras: c, cuotas: q, estados: e, categorias: cat, fijos: f, ajustes: aj[0]?.datos || {}, validaciones: val, ingresos: ing, cobros: cob, prestamos: pre });
     S.ultimaCarga = Date.now();
     if (primeraVez && !t.length && !p.length) await sembrar();
@@ -104,7 +110,7 @@ async function cargarTodo(primeraVez = false) {
     render();
   } catch (err) {
     const m = String(err.message || err);
-    if (/validaciones|ingresos|cobros|tope|linea|prestamos|moneda/i.test(m))
+    if (/validaciones|ingresos|cobros|tope|linea|prestamos|moneda|creditos|pagos_credito/i.test(m))
       pantallaError('Falta actualizar la base de datos.<br>Ejecuta el archivo <b>PASO_1</b> de la carpeta de Supabase en el SQL Editor y vuelve a intentar.<br><span class="tiny">' + esc(m) + '</span>');
     else if (/categorias|fijos|ajustes|schema cache|does not exist/i.test(m))
       pantallaError('Falta actualizar la base de datos.<br>Ejecuta el archivo de actualización en el SQL Editor de Supabase y vuelve a intentar.<br><span class="tiny">' + esc(m) + '</span>');
@@ -337,7 +343,7 @@ function resumenMes(per) {
 
 // ===================== Render principal =====================
 const SECCIONES = [
-  ['resumen', 'Resumen', 'home'], ['gastos', 'Gastos', 'list'], ['prestamos', 'Préstamos', 'hand'], ['analisis', 'Análisis', 'chart'],
+  ['resumen', 'Resumen', 'home'], ['gastos', 'Gastos', 'list'], ['prestamos', 'Préstamos', 'hand'], ['creditos', 'Créditos', 'bank'], ['analisis', 'Análisis', 'chart'],
   null,
   ['sueldo', 'Mi sueldo y avisos', 'wallet'], ['ingresos', 'Ingresos extras', 'coins'], ['cuentas', 'Cuentas', 'users'],
   ['tarjetas', 'Tarjetas', 'card'], ['personas', 'Personas', 'people'], ['categorias', 'Categorías', 'tag'], ['ajustes', 'Ajustes', 'gear'],
@@ -388,6 +394,7 @@ function vista() {
   switch (S.tab) {
     case 'gastos': return vistaGastos();
     case 'prestamos': return vistaPrestamos();
+    case 'creditos': return vistaCreditos();
     case 'analisis': return vistaAnalisis();
     case 'sueldo': return vistaSueldo();
     case 'ingresos': return tarjetaIngresos();
@@ -431,8 +438,13 @@ function vistaAvisos() {
     return `<button class="aviso ${d <= 0 ? 'bad' : d <= 3 ? 'warn' : 'info'}" data-act="irprestamos"><span>🤝</span>
       <span class="grow"><b>${yo ? 'Devuelves a ' : ''}${esc(nombrePila(p.nombre))}</b>${yo ? '' : ' te devuelve'}<br><span class="tiny">${d < 0 ? `Venció hace ${-d} días` : d === 0 ? 'Vence hoy' : `En ${d} días · ${L.fechaCorta(x.vence).slice(0, 5)}`}</span></span>
       <b class="num">${dinero(faltaPrestamo(x), x.moneda)}</b></button>`; }).join('');
-  if (!proximos.length && !prest.length) return '';
-  if (!proximos.length) return `<div class="card avisos"><h3>${ICON.bell}<span style="flex:1">Próximos cobros</span></h3>${prestHtml}</div>`;
+  const cuotasCred = S.creditos.map(cr => ({ cr, E: estadoCredito(cr) })).filter(x => x.E.vencidas.length || (x.E.proxima && L.diasEntre(hoy, x.E.proxima.fecha) <= maxD));
+  const credHtml = cuotasCred.map(({ cr, E }) => { const d = L.diasEntre(hoy, E.proxima.fecha);
+    return `<button class="aviso ${d < 0 || E.vencidas.length ? 'bad' : d <= 3 ? 'warn' : 'info'}" data-act="vercredito" data-v="${cr.id}"><span>${tipoCredito(cr.tipo)[1]}</span>
+      <span class="grow"><b>${esc(cr.nombre)}</b> · cuota ${E.vencidas[0] || E.proxima.n}<br><span class="tiny">${E.vencidas.length ? `${E.vencidas.length} cuota${E.vencidas.length > 1 ? 's' : ''} vencida${E.vencidas.length > 1 ? 's' : ''} sin registrar` : d === 0 ? 'Vence hoy' : `En ${d} días · ${L.fechaCorta(E.proxima.fecha).slice(0, 5)}`}</span></span>
+      <b class="num">${dinero(cr.cuota, cr.moneda)}</b></button>`; }).join('');
+  if (!proximos.length && !prest.length && !credHtml) return '';
+  if (!proximos.length) return `<div class="card avisos"><h3>${ICON.bell}<span style="flex:1">Próximos pagos</span></h3>${credHtml}${prestHtml}</div>`;
   return `<div class="card avisos">
     <h3>${ICON.bell}<span style="flex:1">Próximos pagos</span></h3>
     ${proximos.map(g => {
@@ -443,7 +455,7 @@ function vistaAvisos() {
         <span class="grow"><b>${esc(g.banco)}</b> · ${L.diaSemana(g.fecha)} ${L.fechaCorta(g.fecha).slice(0, 5)}<br><span class="tiny">${cuando}</span></span>
         <b class="num">${soles(g.monto)}</b></button>`;
     }).join('')}
-    ${prestHtml}
+    ${credHtml}${prestHtml}
   </div>`;
 }
 
@@ -754,6 +766,376 @@ function listaCompras() {
   }).join('');
 }
 
+// ===================== Créditos (hipotecario, vehicular, personas…) =====================
+const TIPOS_CREDITO = [['hipotecario', '🏠', 'Hipotecario'], ['vehicular', '🚗', 'Vehicular'], ['persona', '🤝', 'De una persona'], ['bancario', '🏦', 'Préstamo bancario'], ['estudios', '🎓', 'Estudios'], ['otro', '📄', 'Otro']];
+const MEDIOS_PAGO = ['Transferencia', 'Yape', 'Plin', 'Depósito', 'Efectivo', 'Débito automático', 'Otro'];
+const tipoCredito = (k) => TIPOS_CREDITO.find(t => t[0] === k) || TIPOS_CREDITO[5];
+const fechaCuotaCredito = (cr, n) => L.sumarMeses(cr.primera_fecha, n - 1, L.partes(cr.primera_fecha).d);
+const pagosDe = (crId) => S.pagosCredito.filter(p => p.credito_id === crId).sort((a, b) => a.numero - b.numero || a.fecha.localeCompare(b.fecha));
+
+/** Estado de un crédito: pagado, saldo, cuotas, próxima cuota y vencidas. */
+function estadoCredito(cr) {
+  const pagos = pagosDe(cr.id); const hoy = L.hoyISO();
+  const previas = Number(cr.cuotas_previas || 0);
+  const pagado = r2(Number(cr.monto_previo || 0) + suma(pagos));
+  const saldo = r2(Math.max(0, Number(cr.monto_total) - pagado));
+  const nums = new Set(pagos.map(p => p.numero).filter(n => n > previas));
+  const cuotasPagadas = Math.min(cr.num_cuotas, previas + nums.size);
+  let proxima = null; const vencidas = [];
+  for (let n = previas + 1; n <= cr.num_cuotas; n++) {
+    if (nums.has(n)) continue;
+    const f = fechaCuotaCredito(cr, n);
+    if (f < hoy) { vencidas.push(n); continue; }
+    proxima = { n, fecha: f }; break;
+  }
+  if (!proxima && vencidas.length) proxima = { n: vencidas[0], fecha: fechaCuotaCredito(cr, vencidas[0]) };
+  const terminado = cr.cerrado || saldo <= 0.009 || cuotasPagadas >= cr.num_cuotas;
+  return { pagos, pagado, saldo, cuotasPagadas, faltan: Math.max(0, cr.num_cuotas - cuotasPagadas), proxima: terminado ? null : proxima, vencidas: terminado ? [] : vencidas, pct: Math.min(100, pagado / Number(cr.monto_total) * 100), terminado };
+}
+const creditosActivos = () => S.creditos.filter(cr => !estadoCredito(cr).terminado);
+
+function vistaCreditos() {
+  if (S.creditoSel && S.creditos.some(c => c.id === S.creditoSel)) return vistaCreditoDetalle(S.creditos.find(c => c.id === S.creditoSel));
+  const activos = S.creditos.map(cr => ({ cr, E: estadoCredito(cr) })).sort((a, b) => a.E.terminado - b.E.terminado || (a.E.proxima?.fecha || '9').localeCompare(b.E.proxima?.fecha || '9'));
+  const deuda = suma(activos.filter(x => !x.E.terminado), x => aSoles(x.E.saldo, x.cr.moneda));
+  const alMes = suma(activos.filter(x => !x.E.terminado), x => aSoles(x.cr.cuota, x.cr.moneda));
+  const hoy = L.hoyISO();
+  return `
+  <div class="card hero" style="padding:16px">
+    <div class="label">Lo que aún debes en créditos</div>
+    <div class="big num" style="font-size:32px;margin-bottom:6px"><small>S/</small>${fmt.format(deuda)}</div>
+    <div class="label">Pagas <b class="num">${soles(alMes)}</b> al mes en ${activos.filter(x => !x.E.terminado).length} crédito${activos.filter(x => !x.E.terminado).length === 1 ? '' : 's'}</div>
+  </div>
+  <button class="btn sm" data-act="credito" data-v="" style="width:100%;margin-bottom:14px">+ Nuevo crédito</button>
+  ${activos.length ? activos.map(({ cr, E }) => {
+    const t = tipoCredito(cr.tipo); const pr = E.proxima;
+    const dias = pr ? L.diasEntre(hoy, pr.fecha) : null;
+    const badge = E.terminado ? '<span class="badge ok">✓ Pagado por completo</span>'
+      : E.vencidas.length ? `<span class="badge bad">! ${E.vencidas.length} cuota${E.vencidas.length > 1 ? 's' : ''} vencida${E.vencidas.length > 1 ? 's' : ''}</span>`
+      : dias <= 3 ? `<span class="badge warn">Cuota ${pr.n} vence ${dias === 0 ? 'hoy' : `en ${dias} d`}</span>` : `<span class="badge">Próxima: cuota ${pr.n} · ${L.fechaCorta(pr.fecha).slice(0, 5)}</span>`;
+    return `<button class="card credito ${E.terminado ? 'fin' : ''}" data-act="vercredito" data-v="${cr.id}">
+      <div class="crh"><span class="emo" style="font-size:22px">${t[1]}</span>
+        <span class="grow"><b>${esc(cr.nombre)}</b><br><span class="tiny">${esc(t[2])}${cr.acreedor ? ' · ' + esc(cr.acreedor) : ''}</span></span>${ICON.chev}</div>
+      <div class="ctrack" style="margin:12px 0 6px"><i style="width:${E.pct.toFixed(1)}%;background:var(--ok)"></i></div>
+      <div class="crn"><span>Cuota <b>${E.cuotasPagadas}</b> de ${cr.num_cuotas} · faltan ${E.faltan}</span><span class="num">${Math.round(E.pct)}%</span></div>
+      <div class="crk"><div><span class="tiny">Pagado</span><b class="num">${dinero(E.pagado, cr.moneda)}</b></div><div><span class="tiny">Debes</span><b class="num">${dinero(E.saldo, cr.moneda)}</b></div><div><span class="tiny">Cuota</span><b class="num">${dinero(cr.cuota, cr.moneda)}</b></div></div>
+      <div style="margin-top:10px">${badge}</div>
+    </button>`;
+  }).join('') : '<div class="card empty"><div class="ico">🏦</div><b>No tienes créditos registrados</b><p class="tiny">Hipotecario, vehicular, un préstamo de un familiar… Registra cada pago con su captura y descarga el reporte cuando lo necesites.</p></div>'}`;
+}
+
+function vistaCreditoDetalle(cr) {
+  const E = estadoCredito(cr); const t = tipoCredito(cr.tipo); const hoy = L.hoyISO();
+  const previas = Number(cr.cuotas_previas || 0);
+  // Próximas cuotas (vencidas + las 3 siguientes)
+  const prox = []; const pagadasNum = new Set(E.pagos.map(p => p.numero));
+  for (let n = previas + 1; n <= cr.num_cuotas && prox.length < 3 + E.vencidas.length; n++) if (!pagadasNum.has(n)) prox.push(n);
+  // Pagos agrupados por mes en que se pagaron
+  const grupos = {}; for (const p of [...E.pagos].sort((a, b) => b.fecha.localeCompare(a.fecha) || b.numero - a.numero)) (grupos[L.periodo(p.fecha)] ??= []).push(p);
+  const conCaptura = E.pagos.filter(p => p.comprobante).length;
+  return `
+  <button class="btn sm ghost" data-act="vercredito" data-v="" style="margin-bottom:12px">${ICON.back} Todos los créditos</button>
+  <div class="card hero" style="padding:16px">
+    <div class="label">${t[1]} ${esc(t[2])}${cr.acreedor ? ' · ' + esc(cr.acreedor) : ''}</div>
+    <div style="font-size:20px;font-weight:800;margin:4px 0 10px;position:relative;z-index:1">${esc(cr.nombre)}</div>
+    <div class="label">Debes</div>
+    <div class="big num" style="font-size:30px;margin-bottom:8px">${dinero(E.saldo, cr.moneda)}</div>
+    <div class="hbar"><i style="width:${E.pct.toFixed(1)}%"></i></div>
+    <div class="hero-split">
+      <div><span class="tiny-l">Pagado</span><b class="num">${dinero(E.pagado, cr.moneda)}</b></div>
+      <div><span class="tiny-l">Total</span><b class="num">${dinero(cr.monto_total, cr.moneda)}</b></div>
+      <div><span class="tiny-l">Cuotas</span><b class="num">${E.cuotasPagadas}/${cr.num_cuotas}</b></div>
+    </div>
+  </div>
+  <div class="btnrow" style="margin-bottom:14px">
+    ${E.terminado ? '' : `<button class="btn grow" data-act="pagocredito" data-v="${cr.id}">+ Registrar pago</button>`}
+    <button class="btn ghost grow" data-act="reportecredito" data-v="${cr.id}">${ICON.pdf} Reporte PDF</button>
+  </div>
+  ${E.terminado ? '<div class="nota-a ok" style="margin-bottom:14px"><span class="ic">🎉</span><span><b>¡Crédito pagado por completo!</b></span></div>' : `
+  <div class="card"><h3>Próximas cuotas <span class="tiny">faltan ${E.faltan} de ${cr.num_cuotas}</span></h3>
+    ${prox.map(n => { const f = fechaCuotaCredito(cr, n); const d = L.diasEntre(hoy, f);
+      return `<div class="row tap" data-act="pagocredito" data-v="${cr.id}" data-n="${n}">
+        <span class="cnum ${d < 0 ? 'bad' : d <= 3 ? 'warn' : ''}">${n}</span>
+        <div class="grow"><div class="t1">Cuota ${n} de ${cr.num_cuotas}</div><div class="t2">${d < 0 ? `Venció el ${L.fechaCorta(f)} (hace ${-d} días)` : d === 0 ? 'Vence hoy' : `Vence el ${L.diaSemana(f)} ${L.fechaCorta(f)} · en ${d} días`}</div></div>
+        <div class="amt num">${dinero(cr.cuota, cr.moneda)}<div class="tiny" style="color:var(--brand-2)">Pagar ›</div></div></div>`; }).join('')}
+  </div>`}
+  <div class="card"><h3>Pagos registrados <span class="tiny">${E.pagos.length} pagos · ${conCaptura} con captura</span></h3>
+    ${previas ? `<div class="row"><span class="cnum ok">✓</span><div class="grow"><div class="t1">Cuotas 1 a ${previas}</div><div class="t2">Pagadas antes de usar la app</div></div><div class="amt num">${dinero(cr.monto_previo, cr.moneda)}</div></div>` : ''}
+    ${Object.keys(grupos).length ? Object.entries(grupos).map(([per, arr]) => `<div class="group-h" style="margin:12px 0 2px"><span>${capital(L.nombreMes(per))}</span><span class="num">${dinero(suma(arr), cr.moneda)}</span></div>
+      ${arr.map(p => `<div class="row tap" data-act="verpago" data-v="${p.id}">
+        <span class="cnum ok">${p.numero}</span>
+        <div class="grow"><div class="t1">Cuota ${p.numero} · ${esc(p.medio)}</div><div class="t2">Pagado el ${L.fechaCorta(p.fecha)}${p.operacion ? ' · Op. ' + esc(p.operacion) : ''}</div></div>
+        <div class="amt num">${dinero(p.monto, cr.moneda)}<div class="tiny">${p.comprobante ? '📎 Captura' : '<span class="txt-warn">Sin captura</span>'}</div></div></div>`).join('')}`).join('')
+      : (previas ? '' : '<p class="tiny">Aún no registras pagos.</p>')}
+  </div>
+  <div class="card"><h3>Datos del crédito</h3>
+    <div class="subrow"><span class="grow">Cuota mensual</span><b class="num">${dinero(cr.cuota, cr.moneda)}</b></div>
+    <div class="subrow"><span class="grow">Primera cuota</span><b>${L.fechaCorta(cr.primera_fecha)}</b></div>
+    <div class="subrow"><span class="grow">Última cuota</span><b>${L.fechaCorta(fechaCuotaCredito(cr, cr.num_cuotas))}</b></div>
+    ${cr.notas ? `<div class="subrow"><span class="grow">Notas</span><span>${esc(cr.notas)}</span></div>` : ''}
+    <button class="btn ghost" data-act="credito" data-v="${cr.id}" style="margin-top:10px">Editar crédito</button>
+  </div>`;
+}
+
+function formCredito(id) {
+  const cr = id ? S.creditos.find(c => c.id === id) : null;
+  const F = cr ? { ...cr } : { nombre: '', tipo: 'hipotecario', acreedor: '', moneda: 'PEN', monto_total: '', num_cuotas: 12, cuota: '', primera_fecha: L.hoyISO(), cuotas_previas: 0, monto_previo: '', notas: '' };
+  let cuotaManual = !!cr, previoManual = !!cr;
+  abrirHoja(cr ? 'Editar crédito' : 'Nuevo crédito', `
+    <div class="field"><span class="lbl">Tipo de crédito</span><div class="chips-sel" id="cr-tipo">${TIPOS_CREDITO.map(t => `<button type="button" class="chip-sel cat ${t[0] === F.tipo ? 'on' : ''}" data-id="${t[0]}"><span>${t[1]}</span>${t[2]}</button>`).join('')}</div></div>
+    <div class="field"><label>Nombre</label><input class="input" id="cr-nom" value="${esc(F.nombre)}" placeholder="Ej. Departamento Los Olivos, Auto Kia, Préstamo tío Carlos"></div>
+    <div class="field"><label>¿A quién le pagas?</label><input class="input" id="cr-acr" value="${esc(F.acreedor)}" placeholder="Ej. BCP, Interbank, Carlos Morzán"></div>
+    <div class="field"><div class="lblrow"><label>Monto total a pagar</label><div class="seg mini" id="cr-mon"><button type="button" data-m="PEN" class="${F.moneda !== 'USD' ? 'on' : ''}">S/</button><button type="button" data-m="USD" class="${F.moneda === 'USD' ? 'on' : ''}">US$</button></div></div>
+      <div class="money"><span class="cr-ms">${F.moneda === 'USD' ? 'US$' : 'S/'}</span><input class="input num ${F.moneda === 'USD' ? 'usd' : ''}" id="cr-total" type="number" inputmode="decimal" step="0.01" value="${F.monto_total}"></div>
+      <span class="tiny">Lo que pagarás en total sumando todas las cuotas (con intereses).</span></div>
+    <div class="two">
+      <div class="field"><label>Número de cuotas</label><input class="input num" id="cr-n" type="number" inputmode="numeric" min="1" max="600" value="${F.num_cuotas}"></div>
+      <div class="field"><label>Cuota mensual</label><div class="money sm"><span class="cr-ms">${F.moneda === 'USD' ? 'US$' : 'S/'}</span><input class="input num" id="cr-cuota" type="number" inputmode="decimal" step="0.01" value="${F.cuota}"></div></div>
+    </div>
+    <div class="field"><label>Vencimiento de la cuota 1</label><input class="input" id="cr-fecha" type="date" value="${F.primera_fecha}"><span class="tiny">Las demás cuotas vencen el mismo día de cada mes.</span></div>
+    <div class="card" style="padding:12px 14px;margin-bottom:14px">
+      <b style="font-size:14px">¿Ya venías pagando este crédito?</b>
+      <p class="tiny" style="margin:2px 0 10px">Pon cuántas cuotas pagaste antes de usar la app, así no tienes que registrarlas una por una.</p>
+      <div class="two">
+        <div class="field" style="margin:0"><label>Cuotas ya pagadas</label><input class="input num" id="cr-prev" type="number" inputmode="numeric" min="0" value="${F.cuotas_previas || 0}"></div>
+        <div class="field" style="margin:0"><label>Monto ya pagado</label><div class="money sm"><span class="cr-ms">${F.moneda === 'USD' ? 'US$' : 'S/'}</span><input class="input num" id="cr-mprev" type="number" inputmode="decimal" step="0.01" value="${F.monto_previo || ''}"></div></div>
+      </div>
+    </div>
+    <div class="field"><label>Notas (opcional)</label><input class="input" id="cr-notas" value="${esc(F.notas || '')}" placeholder="Ej. TEA 9.5%, código de préstamo 00123"></div>
+    <div class="preview"><div class="why" id="cr-prev-txt"></div></div>
+    <div class="err" id="cr-err"></div>
+    <button class="btn" id="cr-save">Guardar crédito</button>
+    ${cr ? '<button class="btn danger" id="cr-del" style="margin-top:10px">Eliminar crédito (y sus pagos y capturas)</button>' : ''}`, (sh) => {
+    const leer = () => {
+      F.nombre = $('#cr-nom', sh).value.trim(); F.acreedor = $('#cr-acr', sh).value.trim(); F.monto_total = r2($('#cr-total', sh).value);
+      F.num_cuotas = Math.max(1, Math.min(600, parseInt($('#cr-n', sh).value) || 1)); F.primera_fecha = $('#cr-fecha', sh).value;
+      F.cuotas_previas = Math.max(0, Math.min(F.num_cuotas, parseInt($('#cr-prev', sh).value) || 0)); F.notas = $('#cr-notas', sh).value.trim();
+      if (!cuotaManual && F.monto_total) $('#cr-cuota', sh).value = r2(F.monto_total / F.num_cuotas).toFixed(2);
+      F.cuota = r2($('#cr-cuota', sh).value);
+      if (!previoManual) $('#cr-mprev', sh).value = F.cuotas_previas ? r2(F.cuotas_previas * F.cuota).toFixed(2) : '';
+      F.monto_previo = r2($('#cr-mprev', sh).value);
+      const ult = F.primera_fecha ? fechaCuotaCredito(F, F.num_cuotas) : '';
+      $('#cr-prev-txt', sh).innerHTML = F.monto_total && F.primera_fecha ? `${F.num_cuotas} cuotas de <b>${dinero(F.cuota, F.moneda)}</b>, del ${L.fechaCorta(F.primera_fecha)} al ${L.fechaCorta(ult)}.` +
+        (F.cuotas_previas ? `<br>Ya pagaste ${F.cuotas_previas} cuotas (${dinero(F.monto_previo, F.moneda)}); te faltarían <b>${F.num_cuotas - F.cuotas_previas}</b> y debes <b>${dinero(Math.max(0, F.monto_total - F.monto_previo), F.moneda)}</b>.` : '') : 'Completa el monto y la fecha.';
+    };
+    sh.querySelectorAll('input').forEach(i => i.addEventListener('input', leer));
+    $('#cr-cuota', sh).addEventListener('input', () => { cuotaManual = true; });
+    $('#cr-mprev', sh).addEventListener('input', () => { previoManual = true; });
+    grupoChips(sh, '#cr-tipo', (v) => { F.tipo = v; });
+    $('#cr-mon', sh).onclick = (e) => { const b = e.target.closest('[data-m]'); if (!b) return; F.moneda = b.dataset.m; sh.querySelectorAll('#cr-mon button').forEach(k => k.classList.toggle('on', k === b)); sh.querySelectorAll('.cr-ms').forEach(k => { k.textContent = F.moneda === 'USD' ? 'US$' : 'S/'; }); leer(); };
+    $('#cr-save', sh).onclick = async () => {
+      leer(); const err = $('#cr-err', sh);
+      if (!F.nombre) { err.textContent = 'Ponle un nombre al crédito'; return; }
+      if (!(F.monto_total > 0)) { err.textContent = 'Ingresa el monto total'; return; }
+      if (!(F.cuota > 0)) { err.textContent = 'Ingresa la cuota mensual'; return; }
+      if (!F.primera_fecha) { err.textContent = 'Elige la fecha de la cuota 1'; return; }
+      const datos = { nombre: F.nombre, tipo: F.tipo, acreedor: F.acreedor, moneda: F.moneda, monto_total: F.monto_total, num_cuotas: F.num_cuotas, cuota: F.cuota, primera_fecha: F.primera_fecha, cuotas_previas: F.cuotas_previas, monto_previo: F.monto_previo || 0, notas: F.notas };
+      try {
+        if (cr) { await db.actualizar('creditos', cr.id, datos); Object.assign(cr, datos); }
+        else { const n = { id: uid(), ...datos, cerrado: false }; await db.insertar('creditos', n); S.creditos.push(n); S.creditoSel = n.id; }
+        cerrarHoja(); toast('Crédito guardado 🏦'); S.tab = 'creditos'; render();
+      } catch (e) { err.textContent = e.message; }
+    };
+    if (cr) $('#cr-del', sh).onclick = async () => {
+      if (!confirm(`¿Eliminar "${cr.nombre}" con todos sus pagos y capturas? No se puede deshacer.`)) return;
+      try {
+        for (const p of pagosDe(cr.id)) if (p.comprobante) await db.borrarArchivo(p.comprobante).catch(() => {});
+        await db.borrar('creditos', cr.id); if (modoDemo) await db.borrarDonde('pagos_credito', 'credito_id', cr.id);
+        S.creditos = S.creditos.filter(c => c.id !== cr.id); S.pagosCredito = S.pagosCredito.filter(p => p.credito_id !== cr.id); S.creditoSel = null;
+        cerrarHoja(); toast('Crédito eliminado'); render();
+      } catch (e) { toast(e.message); }
+    };
+    leer();
+  });
+}
+
+function formPagoCredito(crId, pagoId = null, nSug = null) {
+  const cr = S.creditos.find(c => c.id === crId); if (!cr) return;
+  const pg = pagoId ? S.pagosCredito.find(p => p.id === pagoId) : null;
+  const E = estadoCredito(cr);
+  const n0 = pg ? pg.numero : (nSug || E.vencidas[0] || E.proxima?.n || E.cuotasPagadas + 1);
+  const F = pg ? { ...pg } : { numero: n0, fecha: L.hoyISO(), monto: cr.cuota, medio: pref.get('medio') || 'Transferencia', operacion: '', nota: '' };
+  let archivo = null, quitar = false;
+  abrirHoja(pg ? 'Editar pago' : 'Registrar pago', `
+    <div class="preview"><div class="why" id="pc-info"></div></div>
+    <div class="two">
+      <div class="field"><label>Cuota número</label><input class="input num" id="pc-n" type="number" inputmode="numeric" min="1" max="${cr.num_cuotas}" value="${F.numero}"></div>
+      <div class="field"><label>Fecha de pago</label><input class="input" id="pc-fecha" type="date" value="${F.fecha}"></div>
+    </div>
+    <div class="field"><label>Monto pagado</label><div class="money"><span>${cr.moneda === 'USD' ? 'US$' : 'S/'}</span><input class="input num ${cr.moneda === 'USD' ? 'usd' : ''}" id="pc-monto" type="number" inputmode="decimal" step="0.01" value="${F.monto}"></div></div>
+    <div class="field"><span class="lbl">¿Cómo pagaste?</span><div class="chips-sel" id="pc-medio">${MEDIOS_PAGO.map(m => `<button type="button" class="chip-sel ${m === F.medio ? 'on' : ''}" data-id="${m}">${m}</button>`).join('')}</div></div>
+    <div class="field"><label>N° de operación (opcional)</label><input class="input" id="pc-op" value="${esc(F.operacion || '')}" placeholder="Código que sale en la constancia"></div>
+    <div class="field"><label>Nota (opcional)</label><input class="input" id="pc-nota" value="${esc(F.nota || '')}"></div>
+    <div class="field"><span class="lbl">Captura del comprobante</span>
+      <label class="captura" id="pc-cap"><input type="file" accept="image/*" id="pc-file" class="hidden">
+        <span id="pc-cap-txt">${pg?.comprobante ? '📎 Ya tiene captura · toca para cambiarla' : '📷 Adjuntar captura (foto o pantallazo)'}</span></label>
+      <img id="pc-img" class="capprev hidden" alt="Vista previa del comprobante">
+      ${pg?.comprobante ? '<button type="button" class="btn sm ghost" id="pc-quitar" style="margin-top:8px">Quitar captura</button>' : ''}
+      <span class="tiny">Se guarda comprimida (≈200 KB) para no gastar espacio.</span></div>
+    <div class="err" id="pc-err"></div>
+    <button class="btn" id="pc-save">${pg ? 'Guardar cambios' : 'Guardar pago'}</button>`, (sh) => {
+    const info = () => { const n = parseInt($('#pc-n', sh).value) || 1; const f = fechaCuotaCredito(cr, n);
+      const ya = S.pagosCredito.some(p => p.credito_id === cr.id && p.numero === n && p.id !== pg?.id);
+      $('#pc-info', sh).innerHTML = `<b>${esc(cr.nombre)}</b><br>Cuota <b>${n} de ${cr.num_cuotas}</b> · vence el ${L.fechaCorta(f)}${ya ? '<br><span class="txt-warn">Esta cuota ya tiene un pago; este se sumará como pago adicional.</span>' : ''}`; };
+    $('#pc-n', sh).addEventListener('input', info); info();
+    grupoChips(sh, '#pc-medio', (v) => { F.medio = v; });
+    $('#pc-file', sh).onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      $('#pc-cap-txt', sh).textContent = 'Procesando imagen…';
+      try { archivo = await aJpeg(f, 1400, 0.72); quitar = false;
+        const img = $('#pc-img', sh); img.src = URL.createObjectURL(archivo.blob); img.classList.remove('hidden');
+        $('#pc-cap-txt', sh).textContent = `✓ Captura lista (${Math.round(archivo.bytes.length / 1024)} KB) · toca para cambiarla`;
+      } catch { $('#pc-cap-txt', sh).textContent = 'No se pudo leer la imagen, prueba con otra'; }
+    };
+    const qb = $('#pc-quitar', sh); if (qb) qb.onclick = () => { quitar = true; archivo = null; $('#pc-cap-txt', sh).textContent = 'Se quitará la captura al guardar'; $('#pc-img', sh).classList.add('hidden'); };
+    $('#pc-save', sh).onclick = async () => {
+      const err = $('#pc-err', sh); const monto = r2($('#pc-monto', sh).value); const n = parseInt($('#pc-n', sh).value);
+      if (!(n >= 1 && n <= cr.num_cuotas)) { err.textContent = `La cuota debe estar entre 1 y ${cr.num_cuotas}`; return; }
+      if (!(monto > 0)) { err.textContent = 'Ingresa el monto'; return; }
+      const b = $('#pc-save', sh); b.disabled = true; b.textContent = archivo ? 'Subiendo captura…' : 'Guardando…';
+      try {
+        const id = pg?.id || uid();
+        let comprobante = pg?.comprobante || null;
+        if (archivo) { const ruta = `${modoDemo ? 'demo' : S.sesion.user.id}/${cr.id}/${id}.jpg`; await db.subirArchivo(ruta, archivo.blob); comprobante = ruta; }
+        else if (quitar && comprobante) { await db.borrarArchivo(comprobante).catch(() => {}); comprobante = null; }
+        const datos = { credito_id: cr.id, numero: n, fecha: $('#pc-fecha', sh).value || L.hoyISO(), monto, medio: F.medio, operacion: $('#pc-op', sh).value.trim(), nota: $('#pc-nota', sh).value.trim(), comprobante };
+        if (pg) { await db.actualizar('pagos_credito', pg.id, datos); Object.assign(pg, datos); }
+        else { const nuevo = { id, ...datos }; await db.insertar('pagos_credito', nuevo); S.pagosCredito.push(nuevo); }
+        pref.set('medio', F.medio);
+        cerrarHoja(); toast(`Cuota ${n} registrada ✓`); S.tab = 'creditos'; S.creditoSel = cr.id; render();
+        if (estadoCredito(cr).terminado) setTimeout(() => toast('🎉 ¡Terminaste de pagar este crédito!'), 2700);
+      } catch (e) { err.textContent = 'No se pudo guardar: ' + e.message; b.disabled = false; b.textContent = 'Reintentar'; }
+    };
+  });
+}
+
+const _urls = {}; // caché de enlaces firmados (ahorra consultas a Supabase)
+async function urlComprobante(ruta) {
+  const c = _urls[ruta]; if (c && c.hasta > Date.now()) return c.url;
+  const url = await db.urlArchivo(ruta); _urls[ruta] = { url, hasta: Date.now() + 50 * 60 * 1000 }; return url;
+}
+
+function verPago(pagoId) {
+  const p = S.pagosCredito.find(x => x.id === pagoId); if (!p) return;
+  const cr = S.creditos.find(c => c.id === p.credito_id);
+  abrirHoja(`Cuota ${p.numero} de ${cr.num_cuotas}`, `
+    <div class="preview">
+      <div class="cq"><span>Crédito</span><b>${esc(cr.nombre)}</b></div>
+      <div class="cq"><span>Monto</span><b class="num">${dinero(p.monto, cr.moneda)}</b></div>
+      <div class="cq"><span>Pagado el</span><b>${L.diaSemana(p.fecha)} ${L.fechaCorta(p.fecha)}</b></div>
+      <div class="cq"><span>Vencía el</span><b>${L.fechaCorta(fechaCuotaCredito(cr, p.numero))}</b></div>
+      <div class="cq"><span>Medio</span><b>${esc(p.medio)}</b></div>
+      ${p.operacion ? `<div class="cq"><span>N° de operación</span><b>${esc(p.operacion)}</b></div>` : ''}
+      ${p.nota ? `<div class="cq"><span>Nota</span><b>${esc(p.nota)}</b></div>` : ''}
+    </div>
+    <div id="vp-img">${p.comprobante ? '<p class="tiny">Cargando captura…</p>' : '<div class="nota-a warn"><span class="ic">📎</span><span>Este pago no tiene captura. Edítalo para adjuntarla.</span></div>'}</div>
+    <div class="btnrow" style="margin-top:12px">
+      <button class="btn ghost grow" data-act="editpago" data-v="${p.id}">Editar</button>
+      <button class="btn danger grow" id="vp-del">Eliminar</button>
+    </div>`, async (sh) => {
+    $('#vp-del', sh).onclick = async () => {
+      if (!confirm(`¿Eliminar el pago de la cuota ${p.numero}${p.comprobante ? ' y su captura' : ''}?`)) return;
+      try { if (p.comprobante) await db.borrarArchivo(p.comprobante).catch(() => {}); await db.borrar('pagos_credito', p.id);
+        S.pagosCredito = S.pagosCredito.filter(x => x.id !== p.id); cerrarHoja(); toast('Pago eliminado'); render(); } catch (e) { toast(e.message); }
+    };
+    if (p.comprobante) {
+      try { const url = await urlComprobante(p.comprobante);
+        $('#vp-img', sh).innerHTML = `<img src="${url}" class="capfull" alt="Comprobante de la cuota ${p.numero}"><a class="btn sm ghost" href="${url}" target="_blank" rel="noopener" style="margin-top:8px;width:100%">Abrir imagen en grande</a>`;
+      } catch (e) { $('#vp-img', sh).innerHTML = `<p class="tiny txt-bad">No se pudo cargar la captura: ${esc(e.message)}</p>`; }
+    }
+  });
+}
+
+/** Reporte PDF consolidado del crédito, con las capturas incrustadas como imágenes. */
+async function reporteCredito(crId) {
+  const cr = S.creditos.find(c => c.id === crId); if (!cr) return;
+  const E = estadoCredito(cr); const t = tipoCredito(cr.tipo);
+  const pagos = [...E.pagos].sort((a, b) => a.numero - b.numero || a.fecha.localeCompare(b.fecha));
+  const conImg = pagos.filter(p => p.comprobante);
+  abrirHoja('Reporte PDF', `<div class="preview"><div class="why" id="rp-est">Preparando el reporte de <b>${esc(cr.nombre)}</b>…</div></div><div id="rp-acc"></div>`, async (sh) => {
+    const est = (h) => { $('#rp-est', sh).innerHTML = h; };
+    try {
+      // 1) Descargar y preparar capturas
+      const imgs = {};
+      for (let i = 0; i < conImg.length; i++) {
+        est(`Agregando capturas al reporte… ${i + 1} de ${conImg.length}`);
+        try { const url = await urlComprobante(conImg[i].comprobante); imgs[conImg[i].id] = await aJpeg(url, 1300, 0.78); } catch { imgs[conImg[i].id] = null; }
+      }
+      est('Armando el PDF…');
+      const doc = new PDF(); const M = 40, AN = doc.W - M * 2; const verde = [0.06, 0.24, 0.18], gris = [0.42, 0.47, 0.44];
+      const ahora = new Date(); const genTxt = `${L.fechaCorta(L.hoyISO())} ${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
+      // Encabezado
+      doc.rect(0, 0, doc.W, 92, { fill: verde });
+      doc.texto(M, 34, 'REPORTE DE PAGOS DE CRÉDITO', { size: 10, bold: true, color: [0.85, 0.95, 0.42] });
+      doc.texto(M, 60, cr.nombre, { size: 20, bold: true, color: [1, 1, 1], maxW: AN });
+      doc.texto(M, 78, `${t[2]}${cr.acreedor ? ' · Acreedor: ' + cr.acreedor : ''}`, { size: 10, color: [0.85, 0.9, 0.87], maxW: AN });
+      // Resumen
+      let y = 118;
+      const datos = [['Monto total', dinero(cr.monto_total, cr.moneda)], ['Cuota mensual', dinero(cr.cuota, cr.moneda)], ['Cuotas pagadas', `${E.cuotasPagadas} de ${cr.num_cuotas}`],
+        ['Total pagado', dinero(E.pagado, cr.moneda)], ['Saldo pendiente', dinero(E.saldo, cr.moneda)], ['Avance', `${E.pct.toFixed(1)}%`],
+        ['Primera cuota', L.fechaCorta(cr.primera_fecha)], ['Última cuota', L.fechaCorta(fechaCuotaCredito(cr, cr.num_cuotas))], ['Pagos con captura', `${conImg.length} de ${pagos.length}`]];
+      const cw = AN / 3;
+      datos.forEach((d, i) => { const x = M + (i % 3) * cw, yy = y + Math.floor(i / 3) * 42;
+        doc.rect(x + 2, yy, cw - 4, 36, { fill: [0.96, 0.95, 0.93] });
+        doc.texto(x + 10, yy + 14, d[0], { size: 8, color: gris }); doc.texto(x + 10, yy + 29, d[1], { size: 11.5, bold: true }); });
+      y += 3 * 42 + 6;
+      doc.rect(M, y, AN, 8, { fill: [0.9, 0.9, 0.87] }); doc.rect(M, y, AN * Math.min(1, E.pct / 100), 8, { fill: [0.12, 0.54, 0.36] });
+      y += 22;
+      if (cr.notas) { y += doc.parrafo(M, y, 'Notas: ' + cr.notas, AN, { size: 9, color: gris }) + 4; }
+      // Tabla de pagos
+      const cols = [['Cuota', 40], ['Vencía', 58], ['Pagado el', 58], ['Monto', 78, 'right'], ['Medio', 82], ['N° operación', 112], ['Captura', 87]];
+      const fila = (vals, yy, { head = false, shade = false } = {}) => {
+        if (head) doc.rect(M, yy - 12, AN, 18, { fill: verde }); else if (shade) doc.rect(M, yy - 12, AN, 18, { fill: [0.97, 0.97, 0.95] });
+        let x = M + 6; cols.forEach((c, i) => { const w = c[1]; const right = c[2] === 'right';
+          doc.texto(right ? x + w - 10 : x, yy, vals[i], { size: 8.5, bold: head, color: head ? [1, 1, 1] : [0.1, 0.13, 0.11], align: right ? 'right' : 'left', maxW: w - 8 }); x += w; });
+      };
+      doc.texto(M, y, 'Detalle de pagos', { size: 13, bold: true }); y += 20;
+      fila(cols.map(c => c[0]), y, { head: true }); y += 18;
+      let anexo = 0; const anexos = {};
+      for (const p of conImg) if (imgs[p.id]) anexos[p.id] = ++anexo;
+      const filas = [];
+      if (cr.cuotas_previas) filas.push([`1-${cr.cuotas_previas}`, '', '', dinero(cr.monto_previo, cr.moneda), 'Antes del registro', '', '']);
+      for (const p of pagos) filas.push([String(p.numero), L.fechaCorta(fechaCuotaCredito(cr, p.numero)), L.fechaCorta(p.fecha), dinero(p.monto, cr.moneda), p.medio, p.operacion || '-', anexos[p.id] ? `Sí · Anexo ${anexos[p.id]}` : p.comprobante ? 'No disponible' : 'Sin captura']);
+      filas.forEach((v, i) => {
+        if (y > doc.H - 70) { doc.nueva(); y = 50; fila(cols.map(c => c[0]), y, { head: true }); y += 18; }
+        fila(v, y, { shade: i % 2 === 1 }); y += 18;
+      });
+      doc.linea(M, y - 8, M + AN, y - 8);
+      doc.texto(M + 6, y + 6, 'TOTAL PAGADO', { size: 9, bold: true }); doc.texto(M + 6 + 40 + 58 + 58 + 78 - 10, y + 6, dinero(E.pagado, cr.moneda), { size: 9, bold: true, align: 'right' });
+      if (!pagos.length && !cr.cuotas_previas) { y += 24; doc.texto(M, y, 'Aún no hay pagos registrados.', { size: 10, color: gris }); }
+      // Anexos: una captura por página, con sus datos
+      for (const p of conImg) {
+        const im = imgs[p.id]; if (!im) continue;
+        doc.nueva(); let yy = 46;
+        doc.texto(M, yy, `ANEXO ${anexos[p.id]} · COMPROBANTE DE LA CUOTA ${p.numero} DE ${cr.num_cuotas}`, { size: 10, bold: true, color: [0.12, 0.42, 0.31] }); yy += 20;
+        doc.texto(M, yy, `${dinero(p.monto, cr.moneda)} · pagado el ${L.diaSemana(p.fecha)} ${L.fechaCorta(p.fecha)} · ${p.medio}${p.operacion ? ' · Op. ' + p.operacion : ''}`, { size: 11, bold: true, maxW: AN }); yy += 16;
+        if (p.nota) { yy += doc.parrafo(M, yy, p.nota, AN, { size: 9, color: gris }); }
+        yy += 8;
+        const maxW = AN, maxH = doc.H - yy - 50; const k = Math.min(maxW / im.w, maxH / im.h);
+        const w = im.w * k, h = im.h * k; const x = M + (AN - w) / 2;
+        doc.rect(x - 1, yy - 1, w + 2, h + 2, { stroke: [0.8, 0.8, 0.77] });
+        doc.imagen(im.bytes, im.w, im.h, x, yy, w, h);
+      }
+      // Pie de página en todas las hojas
+      const total = doc.paginas.length;
+      doc.paginas.forEach((ops, i) => { doc.ops = ops; doc.linea(M, doc.H - 34, M + AN, doc.H - 34);
+        doc.texto(M, doc.H - 20, `Control de Deudas · ${cr.nombre} · generado el ${genTxt}`, { size: 8, color: gris, maxW: AN - 80 });
+        doc.texto(M + AN, doc.H - 20, `Página ${i + 1} de ${total}`, { size: 8, color: gris, align: 'right' }); });
+      const blob = doc.blob();
+      const nombre = `Reporte_${cr.nombre.replace(/[^\wÁÉÍÓÚáéíóúÑñ]+/g, '_')}_${L.hoyISO()}.pdf`;
+      const file = new File([blob], nombre, { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      est(`✓ Reporte listo: ${pagos.length} pago${pagos.length === 1 ? '' : 's'}${conImg.length ? `, ${Object.keys(anexos).length} captura${Object.keys(anexos).length === 1 ? '' : 's'} incluida${Object.keys(anexos).length === 1 ? '' : 's'} como imagen` : ''} · ${total} página${total > 1 ? 's' : ''} · ${Math.max(1, Math.round(blob.size / 1024))} KB`);
+      const puedeCompartir = navigator.canShare && navigator.canShare({ files: [file] });
+      $('#rp-acc', sh).innerHTML = `<a class="btn" href="${url}" download="${esc(nombre)}" style="margin-top:4px">${ICON.pdf} Descargar PDF</a>
+        ${puedeCompartir ? `<button class="btn ghost" id="rp-share" style="margin-top:10px">Compartir (WhatsApp, correo…)</button>` : ''}
+        <a class="btn ghost" href="${url}" target="_blank" rel="noopener" style="margin-top:10px">Ver el PDF</a>`;
+      const sb = $('#rp-share', sh); if (sb) sb.onclick = () => navigator.share({ files: [file], title: nombre }).catch(() => {});
+      window.__ultimoPDF = blob;
+    } catch (e) { est(`<span class="txt-bad">No se pudo generar el reporte: ${esc(e.message)}</span>`); }
+  });
+}
+
 // ===================== Préstamos =====================
 const faltaPrestamo = (x) => r2(Number(x.monto) - Number(x.devuelto || 0));
 function mensajePrestamo(x) {
@@ -973,6 +1355,8 @@ function vistaAnalisis() {
 
   // Préstamos por cobrar
   const prestCobrar = suma(S.prestamos.filter(x => x.tipo !== 'me_prestaron' && faltaPrestamo(x) > 0), x => aSoles(faltaPrestamo(x), x.moneda));
+  const credMes = suma(creditosActivos(), cr => aSoles(cr.cuota, cr.moneda));
+  if (credMes > 0) notas.push([ing && ing - act.tuyo - credMes < 0 ? 'bad' : 'info', '🏦', `Tus créditos suman <b>${soles(credMes)}</b> al mes${ing ? `. Si también los restas, te quedarían <b>${soles(ing - act.tuyo - credMes)}</b>` : ''}.`]);
   if (prestCobrar > 0) notas.push(['info', '🤝', `Tienes <b>${soles(prestCobrar)}</b> prestados por cobrar. Revísalos en Préstamos.`]);
   const donut = graficoDonut(per, ing);
   const intereses = tarjetaIntereses();
@@ -1924,7 +2308,7 @@ async function exportar() {
 
 // ===================== Eventos globales =====================
 const acciones = {
-  tab: (el) => { cerrarMenu(); S.tab = el.dataset.v; render(); window.scrollTo(0, 0); },
+  tab: (el) => { cerrarMenu(); if (el.dataset.v === 'creditos') S.creditoSel = null; S.tab = el.dataset.v; render(); window.scrollTo(0, 0); },
   nueva: () => formCompra(null),
   editar: (el) => formCompra(el.dataset.v),
   fijo: (el) => formFijo(el.dataset.v || null),
@@ -1954,6 +2338,12 @@ const acciones = {
   cobro: (el) => formCobro(el.dataset.v, Number(el.dataset.total)),
   simular: () => formSimular(),
   envios: () => abrirEnvios(false),
+  credito: (el) => formCredito(el.dataset.v || null),
+  vercredito: (el) => { S.creditoSel = el.dataset.v || null; S.tab = 'creditos'; render(); window.scrollTo(0, 0); },
+  pagocredito: (el) => formPagoCredito(el.dataset.v, null, el.dataset.n ? +el.dataset.n : null),
+  verpago: (el) => verPago(el.dataset.v),
+  editpago: (el) => { const p = S.pagosCredito.find(x => x.id === el.dataset.v); cerrarHoja(); setTimeout(() => formPagoCredito(p.credito_id, p.id), 280); },
+  reportecredito: (el) => reporteCredito(el.dataset.v),
   prestamo: (el) => formPrestamo(el.dataset.v || null),
   devolucion: (el) => formDevolucion(el.dataset.v),
   irprestamos: () => { S.tab = 'prestamos'; render(); window.scrollTo(0, 0); },

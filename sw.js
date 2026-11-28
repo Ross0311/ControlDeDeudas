@@ -1,7 +1,7 @@
 // Service worker: guarda la app para que abra rápido. Los datos siempre vienen de Supabase.
 // Si cambias archivos de la app, sube este número para forzar la actualización.
-const VERSION = 'mis-deudas-v7';
-const ARCHIVOS = ['./', './index.html', './css/styles.css', './js/app.js', './js/logic.js', './js/db.js', './js/config.js', './js/categorias.js', './manifest.webmanifest', './icons/icon-192.png', './icons/apple-touch-icon.png'];
+const VERSION = 'mis-deudas-v8';
+const ARCHIVOS = ['./', './index.html', './css/styles.css', './js/app.js', './js/logic.js', './js/db.js', './js/config.js', './js/categorias.js', './js/pdf.js', './manifest.webmanifest', './icons/icon-192.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));

@@ -409,3 +409,23 @@ svg.donut { width: 100%; max-width: 300px; display: block; margin: 4px auto 8px;
   .fab.side svg { width: 22px; height: 22px; }
 }
 .fab.side span { display: inline; }
+
+/* ===================== v8 · Créditos ===================== */
+.card.credito { display: block; width: 100%; text-align: left; }
+.credito.fin { opacity: .7; }
+.crh { display: flex; align-items: center; gap: 12px; }
+.crn { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-2); }
+.crk { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.crk div { background: var(--surface-2); border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.crk b { font-size: 14px; white-space: nowrap; }
+.hbar { height: 8px; border-radius: 99px; background: rgba(255,255,255,.15); overflow: hidden; position: relative; z-index: 1; }
+.hbar i { display: block; height: 100%; background: #d8f26b; border-radius: 99px; }
+.cnum { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; font-weight: 800; font-size: 13px; background: var(--surface-2); color: var(--ink-2); flex: none; }
+.cnum.ok { background: color-mix(in srgb, var(--ok) 15%, var(--surface)); color: var(--ok); }
+.cnum.warn { background: color-mix(in srgb, var(--warn) 15%, var(--surface)); color: var(--warn); }
+.cnum.bad { background: color-mix(in srgb, var(--danger) 13%, var(--surface)); color: var(--danger); }
+.captura { display: block; border: 2px dashed var(--line); border-radius: 14px; padding: 16px; text-align: center; font-weight: 600; color: var(--ink-2); cursor: pointer; background: var(--surface); }
+.captura:active { background: var(--surface-2); }
+.capprev { display: block; max-width: 100%; max-height: 280px; margin: 10px auto 0; border-radius: 12px; border: 1px solid var(--line); }
+.capfull { display: block; width: 100%; border-radius: 12px; border: 1px solid var(--line); margin-top: 4px; }
+.btn svg { flex: none; }
